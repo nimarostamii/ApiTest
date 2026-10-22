@@ -86,11 +86,20 @@ builder.Services
 // ======================================================
 builder.Services.AddAuthorization(options =>
 {
+    // Policy عمومی برای احراز هویت Controller
     options.AddPolicy("WeatherForecastPermission", policy =>
     {
         policy.RequireAuthenticatedUser();
         policy.Requirements.Add(
             new PermissionRequirement("TestApi.WeatherForecast"));
+    });
+
+    // Permission اختصاصی Get1
+    options.AddPolicy("WeatherForecastGetPermissionTest2", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.Requirements.Add(
+            new PermissionRequirement("TestApi.WeatherForecast.Get1"));
     });
 });
 

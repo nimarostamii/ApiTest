@@ -5,8 +5,9 @@ using TestApi.Authorization;
 namespace TestApi.Controllers;
 
 [ApiController]
-[Route("[controller]")]
-[Authorize(Policy = "WeatherForecastPermission")]
+[Route("[controller]/[action]")]
+
+[Authorize]
 public class WeatherForecastController : ControllerBase
 {
     private readonly ILogger<WeatherForecastController> _logger;
@@ -18,6 +19,7 @@ public class WeatherForecastController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = "WeatherForecastPermission")]
     public IEnumerable<WeatherForecast> Get()
     {
         var data = new[]
@@ -135,5 +137,25 @@ public class WeatherForecastController : ControllerBase
         }
 
         return result;
+    }
+
+
+    [HttpGet]
+    [Authorize(Policy = "WeatherForecastGetPermissionTest2")]
+    public IEnumerable<WeatherForecast> Get1()
+    {
+        var data = new[]
+        {
+            new WeatherForecast
+            {
+                Date = DateOnly.FromDateTime(DateTime.Now.AddDays(1)),
+                TemperatureC = 55555,
+                Summary = "Coollllllll",
+                DepartmentId = 111111111
+            }
+        };
+
+        
+        return data;
     }
 }
