@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi.Models;
 using TestApi.Authorization;
@@ -11,7 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 
 // ======================================================
-// CORS - اجازه به همه (برای تست)
+// CORS - مناسب تست
 // ======================================================
 builder.Services.AddCors(options =>
 {
@@ -28,33 +29,34 @@ builder.Services.AddCors(options =>
 // Swagger
 // ======================================================
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
+
+builder.Services.AddSwaggerGen(options =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
+    options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "TestApi",
         Version = "v1"
     });
 
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter JWT Bearer token"
+        Description = "Enter your JWT token"
     });
 
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
                 Reference = new OpenApiReference
                 {
-                    Id = "Bearer",
-                    Type = ReferenceType.SecurityScheme
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
                 }
             },
             Array.Empty<string>()
@@ -63,41 +65,57 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ======================================================
+// OAuth configuration
+// ======================================================
+var oauthAuthority =
+    builder.Configuration["OAuthServiceInfo:Authority"]
+    ?? "https://localhost:7104";
+
+var oauthBaseUrl =
+    builder.Configuration["OAuthServiceInfo:BaseUrl"]
+    ?? oauthAuthority;
+
+// ======================================================
 // Authentication - JWT
 // ======================================================
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = "https://localhost:7104";//"https://172.32.16.17";
+        options.Authority = oauthAuthority;
         options.RequireHttpsMetadata = false;
 
-        options.BackchannelHttpHandler = new HttpClientHandler
+        // فقط برای محیط توسعه و گواهی Self-signed
+        if (builder.Environment.IsDevelopment())
         {
-            ServerCertificateCustomValidationCallback =
-                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-        };
+            options.BackchannelHttpHandler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback =
+                    HttpClientHandler
+                        .DangerousAcceptAnyServerCertificateValidator
+            };
+        }
 
         options.TokenValidationParameters.ValidateAudience = false;
     });
 
 // ======================================================
-// Authorization
+// Authorization policies
 // ======================================================
 builder.Services.AddAuthorization(options =>
 {
-    // Policy عمومی برای احراز هویت Controller
     options.AddPolicy("WeatherForecastPermission", policy =>
     {
         policy.RequireAuthenticatedUser();
+
         policy.Requirements.Add(
             new PermissionRequirement("TestApi.WeatherForecast"));
     });
 
-    // Permission اختصاصی Get1
     options.AddPolicy("WeatherForecastGetPermissionTest2", policy =>
     {
         policy.RequireAuthenticatedUser();
+
         policy.Requirements.Add(
             new PermissionRequirement("TestApi.WeatherForecast.Get1"));
     });
@@ -111,24 +129,35 @@ builder.Services.AddHttpContextAccessor();
 // ======================================================
 // OAuth Permission Validation HttpClient
 // ======================================================
-builder.Services.AddHttpClient("OAuthService", client =>
-{
-    client.BaseAddress = new Uri("https://localhost:7104"); //https://172.32.16.17
-    client.Timeout = TimeSpan.FromSeconds(30);
-})
-.ConfigurePrimaryHttpMessageHandler(() =>
-{
-    return new HttpClientHandler
+builder.Services
+    .AddHttpClient("OAuthService", client =>
     {
-        ServerCertificateCustomValidationCallback =
-            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-    };
-});
+        client.BaseAddress = new Uri(
+            oauthBaseUrl.TrimEnd('/') + "/");
+
+        client.Timeout = TimeSpan.FromSeconds(30);
+    })
+    .ConfigurePrimaryHttpMessageHandler(() =>
+    {
+        var handler = new HttpClientHandler();
+
+        // فقط برای محیط توسعه و گواهی Self-signed
+        if (builder.Environment.IsDevelopment())
+        {
+            handler.ServerCertificateCustomValidationCallback =
+                HttpClientHandler
+                    .DangerousAcceptAnyServerCertificateValidator;
+        }
+
+        return handler;
+    });
 
 // ======================================================
 // Authorization Handler
 // ======================================================
-builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddSingleton<
+    IAuthorizationHandler,
+    PermissionAuthorizationHandler>();
 
 // ======================================================
 // Build
@@ -139,26 +168,21 @@ var app = builder.Build();
 // Swagger
 // ======================================================
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint(
+        "/swagger/v1/swagger.json",
+        "TestApi v1");
+});
 
 // ======================================================
-// CORS (باید قبل از Authentication باشد)
+// Middleware
 // ======================================================
+app.UseRouting();
+
 app.UseCors("AllowAll");
 
-// ======================================================
-// HTTPS
-// ======================================================
-app.UseHttpsRedirection();
-
-// ======================================================
-// Authentication
-// ======================================================
 app.UseAuthentication();
-
-// ======================================================
-// Authorization
-// ======================================================
 app.UseAuthorization();
 
 // ======================================================

@@ -1,0 +1,19 @@
+services:
+  testapi:
+    build:
+      context: ./TestApi
+      dockerfile: Dockerfile
+
+    container_name: testapi
+
+    ports:
+      - "7105:8080"
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+
+      OAuthServiceInfo__Authority: "https://YOUR-OAUTH-SERVER"
+      OAuthServiceInfo__BaseUrl: "https://YOUR-OAUTH-SERVER"
+
+    restart: unless-stopped
